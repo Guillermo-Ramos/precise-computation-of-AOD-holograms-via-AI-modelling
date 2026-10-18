@@ -1,0 +1,1 @@
+Reveisar data version control por tema de git y capacidad, no mover demasiada cantidad (pesos de los modelos)
