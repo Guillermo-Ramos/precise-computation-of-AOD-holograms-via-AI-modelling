@@ -21,9 +21,9 @@ WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Hyperparameters
 
-BATCH_SIZE = 16
+BATCH_SIZE = 256
 EPOCHS = 50
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-4
 
 # Hardware selection
 if torch.cuda.is_available():
@@ -35,6 +35,8 @@ elif torch.backends.mps.is_available():
 else:
     device = torch.device("cpu")
     print("Training on CPU")
+
+torch.set_float32_matmul_precision('high') # Activa TF32
 
 # Data preparation
 print("\n[1] Loading data an dividing Train / Valid...")
@@ -59,12 +61,13 @@ val_dataset = DatasetMicroscope(
 )
 
 # DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True)
 
 # MODEL PREPARATION
 print("\n[2] Initiating model, loss function and optimizer...")
 model = DirectModelAOD().to(device)
+model = torch.compile(model)
 
 # POR CAMBIAR
 '''
@@ -91,26 +94,26 @@ for epoch in range(EPOCHS):
     # TRAINING
     model.train()
     loss_train_total = 0.0
-    
+    scaler = torch.cuda.amp.GradScaler() # Solo estrictamente necesario para float16, pero buena práctica
     for x_aod, y_img, _ in train_loader:
         # Sends data to GPU
-        x_aod = x_aod.to(device)
+        x_aod, y_img = x_aod.to(device), y_img.to(device)
         y_img = y_img.to(device)
         
         # Gradients to zero
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True) # faster than .zero_grad() 
         
-        # Forward pass
-        prediction = model(x_aod)
-        
-        # Computes loss
-        loss = criterio_ponderado(prediction, y_img)
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            # Forward pass
+            prediction = model(x_aod)
+            # Computes loss
+            loss = criterio_ponderado(prediction, y_img)
         
         # Backward pass - Derivatives computation
-        loss.backward()
-        
+        scaler.scale(loss).backward()
         # Updating model weights
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         
         loss_train_total += loss.item() * x_aod.size(0)
         

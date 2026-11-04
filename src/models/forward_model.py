@@ -9,50 +9,50 @@ class DirectModelAOD(nn.Module):
         # are related to each other. It needs a middle layer between
         # the AOD elements and an initial mini.image.
         self.fc_start = nn.Sequential(
-            nn.Linear(38 * 2, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(38 * 2, 1024),
+            nn.BatchNorm1d(1024),
             nn.ReLU(inplace=True),
             
             # Projecting middle layer to a small image.
-            # This image has 32 channels (arbitrary) and 5 x 155 to multiply
+            # This image has 128 channels (arbitrary) and 5 x 155 to multiply
             # comfortably to the final desired resolution
             # 32 channels works fine when starting with low res
-            nn.Linear(256, 32 * 5 * 115),
-            nn.BatchNorm1d(32 * 5 * 115),
+            nn.Linear(256, 128 * 5 * 115),
+            nn.BatchNorm1d(128 * 5 * 115),
             nn.ReLU(inplace=True)
         )
 
         # Now, it will expand spacially, via upsampling and convolutions
-        # Initial: (Batch, 32, 5, 115) NCHW, should change to NHWC (channels_last)
+        # Initial: (Batch, 128, 5, 115) NCHW, should change to NHWC (channels_last)
         
         self.conv1 = nn.Sequential(
-            # Upsample x2 -> (Batch, 32, 10, 230)
+            # Upsample x2 -> (Batch, 128, 10, 230)
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
             nn.ReLU(inplace=True)
         )
 
         self.conv2 = nn.Sequential(
-            # Upsample x2 -> (Batch, 64, 20, 460)
+            # Upsample x2 -> (Batch, 256, 20, 460)
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(inplace=True)
         )
 
         self.conv3 = nn.Sequential(
-            # Upsample x2 -> (Batch, 32, 40, 920)
+            # Upsample x2 -> (Batch, 128, 40, 920)
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
-            nn.Conv2d(32, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True)
         )
 
         self.conv_final = nn.Sequential(
             # Exact upsample to camera dimensions (40, 1844)
             nn.Upsample(size=(40, 1844), mode='bilinear', align_corners=False),
-            nn.Conv2d(16, 1, kernel_size=3, padding=1),
+            nn.Conv2d(64, 1, kernel_size=3, padding=1),
             # Sigmoid to normalize real image [0, 1]
             nn.Sigmoid()
         )
@@ -68,7 +68,7 @@ class DirectModelAOD(nn.Module):
         x = self.fc_start(x)
 
         # Reshape to 2D image
-        x = x.view(batch_size, 32, 5, 115)
+        x = x.view(batch_size, 128, 5, 115)
 
         # Expands image
         x = self.conv1(x)
