@@ -1,0 +1,9 @@
+/data
+/notebooks
+/models
+/notebooks/rest
+/src/models/inverse_model.py
+/experiments/train_inverse.py
+/src/models/__pycache__
+.ipynb_checkpoints/
+__pycache__/
